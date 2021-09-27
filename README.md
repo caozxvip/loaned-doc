@@ -1,10 +1,10 @@
 
-文档名称 | 技术一部-鲸惠项目文档 
+文档名称 | 技术一部-LOANED项目文档 
 --- | ---  
 更新时间 | 2021-03-30
 基于框架 | SpringCloudAlibaba
 作者 | Mickey
-说明 | 鲸惠共库项目文档（`内部使用，禁止外泄`）
+说明 | 共库项目文档（`内部使用，禁止外泄`）
 
 ## 1. 项目介绍
 ### 1.1. 项目结构
@@ -144,13 +144,13 @@ public enum SysErrorEnums implements IMessageEnum {
 #### 2.2.2. 抛异常的方式
 
 1. 调用Asserts类方法（`推荐`）
-```
+```java
 Asserts.fail("错误信息");
 Asserts.fail(SysErrorEnums.EMPTY_PARAME);
 Asserts.fail(SysErrorEnums.ORDER_FAIL, "012312312", "已支付");
 ```
 2. 直接new一个BusinessException异常
-```
+```java
 throw new BusinessException("错误信息");
 throw new BusinessException(SysErrorEnums.EMPTY_PARAME);
 throw new BusinessException(SysErrorEnums.ORDER_FAIL, "012312312", "已支付");
@@ -159,7 +159,7 @@ throw new BusinessException(SysErrorEnums.ORDER_FAIL, "012312312", "已支付");
 
 ### 2.3. 返回结果封装
 #### 2.3.1. 返回通用结果对象
-```
+```java
 返回R对象（com.zsk.loaned.common.model.R）
 
 方法示例：
@@ -182,7 +182,7 @@ public R test(){
 }
 ```
 #### 2.3.2. 返回通用分页对象
-```
+```java
 返回PageResult对象（com.zsk.loaned.common.model.PageResult）
 
 方法示例：
@@ -213,19 +213,26 @@ public PageResult list(Integer page, Integer limit, String username, String nick
 ```
 
 ### 2.4. 获取用户信息
-1. 从CurrentUser中获取用户信息（`推荐`）
-```
+1. 从CurrentUser中获取用户信息
+```java
 CurrentUser user = UserContext.getUser();
 log.info("用户ID：{}", user.getUserId());
 //admin 后端用户，member APP用户，用户服务获取用户详细信息时使用
 log.info("用户类型：{}", user.getUserType());
 ```
 2. 从安全上下文获取用户信息
-```
+```java
 String userId = SecurityContextHolder.getContext().getAuthentication().getPrincipal().toString();
 ```
-3. 业务中直接通过用户服务获取用户的详细信息进行业务处理（`业务使用`）
-```
+3. 业务中获取用户的详细信息进行业务处理（`业务使用`）
+```java
+// 1.参数直接传递（controller接口直接接收用户信息，需配合@CurrentUser注解使用）（推荐）
+@GetMapping("/userInfo")
+public R userInfo(@CurrentUser UmsUserInfo userInfo){
+    return R.ok().setData(userInfo);
+}
+        
+// 2.注入umsUserService服务，使用提供的getCurrentUser方法
 UmsUserInfo userInfo = umsUserService.getCurrentUser();
 ```
 
@@ -257,7 +264,7 @@ public class UserKey extends BasePrefix {
 }
 ```
 #### 2.5.2. 使用redis存取数据
-```
+```java
 //注入redis服务
 @Autowired
 private RedisService redisService;
