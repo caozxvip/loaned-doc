@@ -213,18 +213,22 @@ public PageResult list(Integer page, Integer limit, String username, String nick
 ```
 
 ### 2.4. 获取用户信息
-1. 从CurrentUser中获取用户信息
+
+#### 2.4.1 从CurrentUser中获取用户信息
+
 ```java
 CurrentUser user = UserContext.getUser();
 log.info("用户ID：{}", user.getUserId());
 //admin 后端用户，member APP用户，用户服务获取用户详细信息时使用
 log.info("用户类型：{}", user.getUserType());
 ```
-2. 从安全上下文获取用户信息
+#### 2.4.2 从安全上下文获取用户信息
+
 ```java
 String userId = SecurityContextHolder.getContext().getAuthentication().getPrincipal().toString();
 ```
-3. 业务中获取用户的详细信息进行业务处理（`业务使用`）
+#### 2.4.3 业务中获取用户的详细信息进行业务处理（`业务使用`）
+
 ```java
 // 1.参数直接传递（controller接口直接接收用户信息，需配合@CurrentUser注解使用）（推荐）
 @GetMapping("/userInfo")
@@ -236,7 +240,10 @@ public R userInfo(@CurrentUser UmsUserInfo userInfo){
 UmsUserInfo userInfo = umsUserService.getCurrentUser();
 ```
 
+
+
 ### 2.5. Redis使用
+
 #### 2.5.1. 维护业务redis的key
 维护在com.zsk.loaned.*.rediskeys下，以下已用户缓存为例：
 ```java
@@ -276,11 +283,34 @@ UmsUser umsUser = redisService.get(UserKey.userById, userId.toString(), UmsUser.
 redisService.set(UserKey.userById, userId.toString(), umsUser);
 ```
 
+
+
 ### 2.6 分布式锁（redission）
 
 #### 2.6.1 直接redisson原生代码实现（不推荐）
 
-#### 2.6.2 使用封装的分布式锁注解@BusinessLock
+```java
+	@UserLogin(userType = JwtConstant.LOGIN_USER_TYPE.MEMBER)
+    @ApiOperation(value = "渠道注册")
+    @PostMapping("/channelRegisterH5")
+    public R channelRegisterH5(@Validated @RequestBody UmsChannelRegisterReq channelRegisterReq, HttpServletRequest request) {
+        try {
+            //直接使用redission代码加锁
+            if (redissionService.tryLock(LockKey.channelRegLockH5, channelRegisterReq.getPhone(), 5)) {
+                return umsUserService.channelRegisterH5(channelRegisterReq, request);
+            } else {
+                return R.error(SysErrorEnums.TIME_OUT);
+            }
+        } finally {
+            //最终解锁
+            redissionService.unlock(LockKey.channelRegLockH5, channelRegisterReq.getPhone());
+        }
+    }
+```
+
+
+
+#### 2.6.2 使用封装的分布式锁注解@BusinessLock（推荐）
 
 | 属性      | 必填 | 示例                                 | 描述                                                         |
 | --------- | ---- | ------------------------------------ | ------------------------------------------------------------ |
@@ -307,5 +337,162 @@ redisService.set(UserKey.userById, userId.toString(), umsUser);
     public R closed(@Validated @RequestBody UserClosedReq closedReq, @CurrentUser UmsUserInfo user, HttpServletRequest request) 	{
         return umsUserService.closed(closedReq, user, request);
     }
+```
+
+### 2.7 消息中间件（rabbitmq）
+
+#### 2.7.1引入配置和相关依赖
+
+```java
+//在nacos中加入rabbit-config.yaml扩展配置
+extension-configs:
+    - refresh: true
+    dataId: rabbit-config.yaml
+    
+//在maven中引入相关依赖
+<!-- 消息模块 -->
+<dependency>
+    <groupId>com.zsk.loaned</groupId>
+    <artifactId>rabbit-core-producer</artifactId>
+    <version>1.0-SNAPSHOT</version>
+</dependency>
+```
+
+#### 2.7.2 配置交换机，队列，绑定关系
+
+```java
+//实例化交换机，如果rabbitmq已经创建可不用代码维护
+@Component
+public class RabbitmqExchange {
+
+    /** 通用topic交换机 */
+    @Bean
+    public TopicExchange userEventExchange() {
+        //String name, boolean durable, boolean autoDelete, Map<String, Object> arguments
+        return new TopicExchange(RabbitmqUserConstant.EXCHANGE.EVENT, true, false);
+    }
+
+    /** 延迟交换机<安装了rabbitmq_delayed_message_exchange插件> */
+    @Bean
+    public CustomExchange userDelayedExchange() {
+        Map<String, Object> args = Maps.newHashMap();
+        args.put("x-delayed-type", "topic");
+        return new CustomExchange(RabbitmqUserConstant.EXCHANGE.EVENT_DELAYED, "x-delayed-message", true, false, args);
+    }
+}
+
+@Component
+public class RabbitmqTaskQueue {
+
+    /** 任务队列声明 <声明队列、队列属性> */
+    @Bean
+    public Queue taskQueue() {
+        //String name, boolean durable, boolean exclusive, boolean autoDelete, @Nullable Map<String, Object> arguments
+        return new Queue(RabbitmqUserConstant.QUEUE.TASK, true, false, false);
+    }
+	
+    /** 任务队列通过路由键和交换机绑定关系 */
+    @Bean
+    public Binding taskBinding() {
+        //String destination, Binding.DestinationType destinationType, String exchange, String routingKey, @Nullable Map<String, Object> arguments
+        return new Binding(RabbitmqUserConstant.QUEUE.TASK, Binding.DestinationType.QUEUE, RabbitmqUserConstant.EXCHANGE.EVENT, RabbitmqUserConstant.ROUTINGKEY.TASK, null);
+    }
+}
+```
+
+#### 2.7.3 业务消息发送和消费
+
+##### 2.7.3.1 发送消息
+
+```java
+	/** rabbitmq客户端 */
+    @Autowired
+    private RabbitProducerClient producerClient;
+
+
+	/** 发送rabbitmq消息 */
+	@GetMapping("/sendMq")
+    public R sendMq(String msg) {
+        JSONObject data = new JSONObject();
+        data.put("message", msg);
+        data.put("time", System.currentTimeMillis());
+        /**
+         * 业务消息建造者<MessageBuilder>构建消息
+         * messageId: 消息唯一ID，可不设置，默认IdUtil.simpleUUID()方法创建
+         * messageType消息类型：
+         *              MessageType.RAPID      迅速消息：不保证消息的可靠性，也不做confirm确认
+         *              MessageType.CONFIRM    确认消息：不保证消息的可靠性，但是会做消息的confim确认
+         *              MessageType.RELIANT    可靠消息：保证消息的100%的可靠性投递，定时自动补偿
+         * topic：消息要发送的交换机
+         * routingKey：消息要发送的路由键（根据不同的路由规则，将交换机上的消息投递到不同的队列）
+         * delayMills: 消息延迟发送的时间（单位/ms），队列必须是延迟队列才会生效
+         * attributes：消息内容，Map<String, Object>类型用于存放业务消息
+         */
+        Message message = MessageBuilder.create()
+                .withMessageId(IdUtil.simpleUUID())
+                .withMessageType(MessageType.RELIANT)
+                .withTopic(RabbitmqUserConstant.EXCHANGE.EVENT)
+                .withRoutingKey(RabbitmqUserConstant.ROUTINGKEY.TASK)
+                .withDelayMills(5000)
+                .withAttributes(data).build();
+        //使用rabbit封装的api客户端发送消息
+        producerClient.send(message);
+
+
+        List<Message> messageList = Lists.newArrayList();
+        messageList.add(message);
+        messageList.add(message);
+        //使用rabbit封装的api客户端发送批量消息，注：批量消息默认迅速消息类型，不保证可靠性
+        producerClient.send(messageList);
+
+
+        //使用rabbit封装的api客户端发送带回调方法的消息，注：带回调消息默认confirm消息类型，不保证可靠性，会做confirm确认
+        producerClient.send(message, new SendCallback() {
+            @Override
+            public void onSuccess() {
+                log.info("消息发送成功，messgeId：{}", message.getMessageId());
+                //do something
+            }
+
+            @Override
+            public void onFailure(String reason) {
+                log.error("消息发送失败，messgeId：{}，reason：{}", message.getMessageId(), reason);
+                //do something
+            }
+        });
+        return R.ok();
+    }
+```
+
+##### 2.7.3.2 监听消息并消费
+
+```java
+@Component
+public class RabbitMqListener {
+
+    //queues：要监听的消息，数组，可监听多个队列
+    @RabbitListener(queues = RabbitmqUserConstant.QUEUE.TASK)
+    public void sms(com.zsk.loaned.base.rabbit.api.Message msg, Message message, Channel channel) {
+        Map<String, Object> data = msg.getAttributes();
+        log.info("业务消息：", data);
+        //do something
+        /**
+         * deliveryTag：该消息的标识，通道内递增，用于签收消息
+         * multiple：是否批量， true：将一次性ack所有小于deliveryTag的消息。
+         * requeue：被拒绝的是否重新入队列。
+         */
+        long deliveryTag = message.getMessageProperties().getDeliveryTag();
+        try {
+            //手动签收消息
+            channel.basicAck(deliveryTag, false);
+//            //表示签收失败
+//            channel.basicNack(deliveryTag, false, false);
+//            //拒签，第二个参数表示是否重新入队
+//            channel.basicReject(deliveryTag, false);
+        } catch (IOException e) {
+            //一般是网络原因，确认失败
+        }
+    }
+}
 ```
 
