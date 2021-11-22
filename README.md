@@ -236,7 +236,7 @@ public R userInfo(@CurrentUser UmsUserInfo userInfo){
 UmsUserInfo userInfo = umsUserService.getCurrentUser();
 ```
 
-### 2.5. redis使用
+### 2.5. Redis使用
 #### 2.5.1. 维护业务redis的key
 维护在com.zsk.loaned.*.rediskeys下，以下已用户缓存为例：
 ```java
@@ -275,3 +275,37 @@ UmsUser umsUser = redisService.get(UserKey.userById, userId.toString(), UmsUser.
 //将数据存入redis
 redisService.set(UserKey.userById, userId.toString(), umsUser);
 ```
+
+### 2.6 分布式锁（redission）
+
+#### 2.6.1 直接redisson原生代码实现（不推荐）
+
+#### 2.6.2 使用封装的分布式锁注解@BusinessLock
+
+| 属性      | 必填 | 示例                                 | 描述                                                         |
+| --------- | ---- | ------------------------------------ | ------------------------------------------------------------ |
+| spelKey   | 是   | "'xxxController.xxxMethod' + #param" | 加锁的key，支持spel表达式，如果计算失败默认不加锁（必须是可变的key，避免对所有用户加锁） |
+| waitTime  | 否   | 10                                   | 获取锁的最大等待时间，默认10，大于0使用tryLock加锁           |
+| leaseTime | 否   | 10                                   | 加锁的时间， 默认10                                          |
+| unit      | 否   | TimeUnit.SECONDS                     | waitTime，leaseTime参数的单位，默认秒                        |
+| isFair    | 否   | false                                | 是否公平锁，默认否                                           |
+
+```java
+	//计算后的spelKey例：UmsUserController.loginSms131xxxx8888，lock加锁5秒，获取失败阻塞等待
+	@BusinessLock(spelKey = "'UmsUserController.loginSms' + #umsLoginSmsReq.phone", leaseTime = 5)
+    @PostMapping(value = "/loginSms")
+    @ApiOperation(value = "登录短信接口")
+    public R loginSms(@Validated @RequestBody UmsLoginSmsReq umsLoginSmsReq, HttpServletRequest request) {
+        return umsUserService.loginSms(umsLoginSmsReq, request);
+    }
+	
+	//计算后的spelKey例：UmsUserController.closed12，tryLock尝试获取公平锁800毫秒，获取成功加锁500毫秒，获取失败返回数据处理中，请稍后再试...
+	@BusinessLock(spelKey = "'UmsUserController.closed' + #user.id", , waitTime = 800, leaseTime = 500, unit = TimeUnit.MILLISECONDS, isFair = true)
+    @UserLogin(userType = JwtConstant.LOGIN_USER_TYPE.MEMBER)
+    @ApiOperation(value = "注销接口")
+    @PostMapping(value = "/closed")
+    public R closed(@Validated @RequestBody UserClosedReq closedReq, @CurrentUser UmsUserInfo user, HttpServletRequest request) 	{
+        return umsUserService.closed(closedReq, user, request);
+    }
+```
+
