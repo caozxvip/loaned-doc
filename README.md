@@ -1,5 +1,5 @@
 
-文档名称 | 技术一部-LOANED项目文档 
+文档名称 | LOANED项目文档 
 --- | ---  
 更新时间 | 2021-11-22
 基于框架 | SpringCloudAlibaba
@@ -13,7 +13,7 @@
     |-- .gitignore
     |-- pom.xml -- 父pom文件
     |-- README.md -- 项目介绍
-    |-- loaned-admin -- 子模块（后端管理系统模块）
+    |-- loaned-admin -- 子模块（内容管理及系统模块）
     |   |-- pom.xml -- 子模块pom
     |   |-- src
     |   |   |-- main
@@ -33,6 +33,7 @@
     |   |   |   |                   |-- enums -- 枚举类，业务枚举或异常枚举等
     |   |   |   |                   |-- utils -- 工具类
     |   |   |   |                   |-- feign -- feign接口类，所有远程调用服务
+    |   |   |   |                   |-- rabbitmq -- 消息队列（交换机、队列、绑定关系维护，消息监听、消费）
     |   |   |   |                   |-- modules -- 子模块下的全部业务逻辑代码
     |   |   |   |                   |   |-- sys -- 子模块下子业务块逻辑（后台管理系统的系统管理模块）
     |   |   |   |                   |       |-- controller -- 控制层
@@ -53,10 +54,11 @@
     |   |   |           |-- sys -- 子模块子业务的sql
     |   |   |-- test
     |   |       |-- java
-    |-- loaned-cms -- 内容管理模块：产品、渠道、应用...等管理
     |-- loaned-common -- 公共模块：公共配置、feign、jackson、mybatisplus、redis、资源服务器、knife4j接口文档、统一异常处理等...
     |-- loaned-getway -- 网关模块：网关路由配置
     |-- loaned-iaas -- 基础服务模块：oauth2 + SpringSecurity + JWT多端用户授权、短信服务等...
+    |-- loaned-order -- 订单管理模块：会员订单，微店订单，投诉单...等管理
+    |-- loaned-rabbit -- 消息模块：封装了rabbitmq消息中间件（多种消息类型，多种发送方式，可靠性投递,异步发送，Template池化关管理）
     |-- loaned-report -- 报表模块：业务报表统计
     |-- loaned-user -- 用户模块：会员用户登录、用户数据操作等...
     |-- ... -- 其他业务模块
@@ -91,7 +93,6 @@
  * @Date 2021/2/10 17:41
  **/
 public enum SysErrorEnums implements IMessageEnum {
-
     /**
      *
      * 系统错误1000~1999
@@ -104,21 +105,19 @@ public enum SysErrorEnums implements IMessageEnum {
      *  ...
      *  错误信息可加参数，例如：订单{0}状态异常，当前状态为{1} ，使用时 new BusinessException(OrderErrorEnums.ERROR_ORDER_STATE, "订单号", "已失效");
      **/
-
+    
     /**操作成功*/
     SUCCESS(200, "操作成功"),
     /**用户未认证*/
     UNAUTHORIZED(401, "未登录或token已过期"),
     /**操作失败*/
     FAIL(500, "操作失败"),
-
     /**服务器未知异常*/
     UNKNOW(1000,"Sorry，服务器开小差啦~"),
     /**参数为空*/
     EMPTY_PARAME(1001,"参数为空"),
     /**参数错误*/
     ERROR_PARAME(1002,"参数错误"),
-
     ;
     private int errorCode;
     private String errorMessage;
@@ -173,12 +172,12 @@ public R test(){
 
 返回示例：
 {
-  "msg": "success",
-  "code": 200,
-  "data": {
-    "test": "test"
-  },
-  "success": true
+    "msg": "success",
+    "code": 200,
+    "data": {
+        "test": "test"
+    },
+    "success": true
 }
 ```
 #### 2.3.2. 返回通用分页对象
@@ -187,29 +186,35 @@ public R test(){
 
 方法示例：
 @GetMapping("/list")
-public PageResult list(Integer page, Integer limit, String username, String nickname){
-    return sysUserService.list(page, limit, username, nickname);
+public R list(Integer page, Integer limit){
+    PageResult pageData = service.list(page, limit);
+    return R.ok().setPageData(pageData);
 }
 
 返回示例：
 {
-  "totalCount": 3,
-  "pageSize": 10,
-  "totalPage": 1,
-  "currPage": 1,
-  "hasPrevious": false,
-  "hasNext": false,
-  "list": [
-    {
-      "userId": "1",
-      "username": "admin",
-      "nickname": "管理员",
-      "state": 1,
-      "createTime": "2021-02-28 17:56:25",
-      "updateTime": "2021-03-23 23:43:11"
-    }
-  ]
-}
+    "msg": "success",
+    "code": 200,
+    "data": {
+        "totalCount": 3,
+        "pageSize": 10,
+        "totalPage": 1,
+        "currPage": 1,
+        "hasPrevious": false,
+        "hasNext": false,
+        "list": [
+            {
+                "userId": "1",
+                "username": "admin",
+                "nickname": "管理员",
+                "state": 1,
+                "createTime": "2021-02-28 17:56:25",
+                "updateTime": "2021-03-23 23:43:11"
+            }
+        ]
+    },
+    "success": true
+}  
 ```
 
 ### 2.4. 获取用户信息
@@ -235,12 +240,13 @@ String userId = SecurityContextHolder.getContext().getAuthentication().getPrinci
 public R userInfo(@CurrentUser UmsUserInfo userInfo){
     return R.ok().setData(userInfo);
 }
-        
+
 // 2.注入umsUserService服务，使用提供的getCurrentUser方法
 UmsUserInfo userInfo = umsUserService.getCurrentUser();
 ```
 
-
+> 推荐使用注解参数的方式注入用户信息
+>
 
 ### 2.5. Redis使用
 
@@ -257,16 +263,10 @@ public class UserKey extends BasePrefix {
     public UserKey(int expireSeconds, String prefix) {
         super(expireSeconds, prefix);
     }
-
-    public static UserKey userlist = new UserKey(60 * 10, "userlist");
-
-    /**
-     * 根据用户名缓存用户信息
-     **/
+    
+    /** 根据用户名缓存用户信息 **/
     public static UserKey userByUserNameAndAppID = new UserKey(60 * 10, "una");
-    /**
-     * 根据用户ID缓存用户信息
-     **/
+    /** 根据用户ID缓存用户信息 **/
     public static UserKey userById = new UserKey(60 * 10, "uid");
 }
 ```
@@ -277,66 +277,62 @@ public class UserKey extends BasePrefix {
 private RedisService redisService;
 
 //从redis里面获取缓存数据
-UmsUser umsUser = redisService.get(UserKey.userById, userId.toString(), UmsUser.class);
+UmsUser umsUser = redisService.get(UserKey.userById, userId, UmsUser.class);
 
 //将数据存入redis
-redisService.set(UserKey.userById, userId.toString(), umsUser);
+redisService.set(UserKey.userById, userId, umsUser);
 ```
-
-
 
 ### 2.6 分布式锁（redission）
 
 #### 2.6.1 直接redisson原生代码实现（不推荐）
 
 ```java
-	@UserLogin(userType = JwtConstant.LOGIN_USER_TYPE.MEMBER)
-    @ApiOperation(value = "渠道注册")
-    @PostMapping("/channelRegisterH5")
-    public R channelRegisterH5(@Validated @RequestBody UmsChannelRegisterReq channelRegisterReq, HttpServletRequest request) {
-        try {
-            //直接使用redission代码加锁
-            if (redissionService.tryLock(LockKey.channelRegLockH5, channelRegisterReq.getPhone(), 5)) {
-                return umsUserService.channelRegisterH5(channelRegisterReq, request);
-            } else {
-                return R.error(SysErrorEnums.TIME_OUT);
-            }
-        } finally {
-            //最终解锁
-            redissionService.unlock(LockKey.channelRegLockH5, channelRegisterReq.getPhone());
+@UserLogin(userType = JwtConstant.LOGIN_USER_TYPE.MEMBER)
+@ApiOperation(value = "渠道注册")
+@PostMapping("/channelRegisterH5")
+public R channelRegisterH5(@Validated @RequestBody UmsChannelRegisterReq channelRegisterReq, HttpServletRequest request) {
+    try {
+        //直接使用redission代码加锁
+        if (redissionService.tryLock(LockKey.channelRegLockH5, channelRegisterReq.getPhone(), 5)) {
+            return umsUserService.channelRegisterH5(channelRegisterReq, request);
+        } else {
+            return R.error(SysErrorEnums.TIME_OUT);
         }
+    } finally {
+        //最终解锁
+        redissionService.unlock(LockKey.channelRegLockH5, channelRegisterReq.getPhone());
     }
+}
 ```
-
-
 
 #### 2.6.2 使用封装的分布式锁注解@BusinessLock（推荐）
 
 | 属性      | 必填 | 示例                                 | 描述                                                         |
 | --------- | ---- | ------------------------------------ | ------------------------------------------------------------ |
 | spelKey   | 是   | "'xxxController.xxxMethod' + #param" | 加锁的key，支持spel表达式，如果计算失败默认不加锁（必须是可变的key，避免对所有用户加锁） |
-| waitTime  | 否   | 10                                   | 获取锁的最大等待时间，默认10，大于0使用tryLock加锁           |
+| waitTime  | 否   | 0                                    | 获取锁的最大等待时间，默认0，大于0使用tryLock加锁            |
 | leaseTime | 否   | 10                                   | 加锁的时间， 默认10                                          |
 | unit      | 否   | TimeUnit.SECONDS                     | waitTime，leaseTime参数的单位，默认秒                        |
 | isFair    | 否   | false                                | 是否公平锁，默认否                                           |
 
 ```java
-	//计算后的spelKey例：UmsUserController.loginSms131xxxx8888，lock加锁5秒，获取失败阻塞等待
-	@BusinessLock(spelKey = "'UmsUserController.loginSms' + #umsLoginSmsReq.phone", leaseTime = 5)
-    @PostMapping(value = "/loginSms")
-    @ApiOperation(value = "登录短信接口")
-    public R loginSms(@Validated @RequestBody UmsLoginSmsReq umsLoginSmsReq, HttpServletRequest request) {
-        return umsUserService.loginSms(umsLoginSmsReq, request);
-    }
-	
-	//计算后的spelKey例：UmsUserController.closed12，tryLock尝试获取公平锁800毫秒，获取成功加锁500毫秒，获取失败返回数据处理中，请稍后再试...
-	@BusinessLock(spelKey = "'UmsUserController.closed' + #user.id", , waitTime = 800, leaseTime = 500, unit = TimeUnit.MILLISECONDS, isFair = true)
-    @UserLogin(userType = JwtConstant.LOGIN_USER_TYPE.MEMBER)
-    @ApiOperation(value = "注销接口")
-    @PostMapping(value = "/closed")
-    public R closed(@Validated @RequestBody UserClosedReq closedReq, @CurrentUser UmsUserInfo user, HttpServletRequest request) 	{
-        return umsUserService.closed(closedReq, user, request);
-    }
+//计算后的spelKey例：UmsUserController.loginSms131xxxx8888，lock加锁5秒，获取失败阻塞等待
+@BusinessLock(spelKey = "'UmsUserController.loginSms' + #umsLoginSmsReq.phone", leaseTime = 5)
+@PostMapping(value = "/loginSms")
+@ApiOperation(value = "登录短信接口")
+public R loginSms(@Validated @RequestBody UmsLoginSmsReq umsLoginSmsReq, HttpServletRequest request) {
+    return umsUserService.loginSms(umsLoginSmsReq, request);
+}
+
+//计算后的spelKey例：UmsUserController.closed12，tryLock尝试获取公平锁800毫秒，获取成功加锁500毫秒，获取失败返回数据处理中，请稍后再试...
+@BusinessLock(spelKey = "'UmsUserController.closed' + #user.id", , waitTime = 800, leaseTime = 500, unit = TimeUnit.MILLISECONDS, isFair = true)
+@UserLogin(userType = JwtConstant.LOGIN_USER_TYPE.MEMBER)
+@ApiOperation(value = "注销接口")
+@PostMapping(value = "/closed")
+public R closed(@Validated @RequestBody UserClosedReq closedReq, @CurrentUser UmsUserInfo user, HttpServletRequest request) 	{
+    return umsUserService.closed(closedReq, user, request);
+}
 ```
 
 ### 2.7 消息中间件（rabbitmq）
@@ -409,7 +405,6 @@ public class RabbitmqTaskQueue {
     @Autowired
     private RabbitProducerClient producerClient;
 
-
 	/** 发送rabbitmq消息 */
 	@GetMapping("/sendMq")
     public R sendMq(String msg) {
@@ -453,7 +448,6 @@ public class RabbitmqTaskQueue {
                 log.info("消息发送成功，messgeId：{}", message.getMessageId());
                 //do something
             }
-
             @Override
             public void onFailure(String reason) {
                 log.error("消息发送失败，messgeId：{}，reason：{}", message.getMessageId(), reason);
@@ -476,19 +470,15 @@ public class RabbitMqListener {
         Map<String, Object> data = msg.getAttributes();
         log.info("业务消息：", data);
         //do something
-        /**
-         * deliveryTag：该消息的标识，通道内递增，用于签收消息
-         * multiple：是否批量， true：将一次性ack所有小于deliveryTag的消息。
-         * requeue：被拒绝的是否重新入队列。
-         */
+        
+        //deliveryTag：该消息的标识，通道内递增，用于签收消息
+        //multiple：是否批量， true：将一次性ack所有小于deliveryTag的消息。
+        //requeue：被拒绝的是否重新入队列。
         long deliveryTag = message.getMessageProperties().getDeliveryTag();
         try {
-            //手动签收消息
-            channel.basicAck(deliveryTag, false);
-//            //表示签收失败
-//            channel.basicNack(deliveryTag, false, false);
-//            //拒签，第二个参数表示是否重新入队
-//            channel.basicReject(deliveryTag, false);
+            channel.basicAck(deliveryTag, false);			//手动签收消息
+//          channel.basicNack(deliveryTag, false, false); 	//表示签收失败
+//          channel.basicReject(deliveryTag, false);		//拒签，第二个参数表示是否重新入队
         } catch (IOException e) {
             //一般是网络原因，确认失败
         }
