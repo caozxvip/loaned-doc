@@ -308,25 +308,25 @@ public R channelRegisterH5(@Validated @RequestBody UmsChannelRegisterReq channel
 
 #### 2.6.2 使用封装的分布式锁注解@BusinessLock（推荐）
 
-| 属性      | 必填 | 示例                                 | 描述                                                         |
-| --------- | ---- | ------------------------------------ | ------------------------------------------------------------ |
-| spelKey   | 是   | "'xxxController.xxxMethod' + #param" | 加锁的key，支持spel表达式，如果计算失败默认不加锁（必须是可变的key，避免对所有用户加锁） |
-| waitTime  | 否   | 0                                    | 获取锁的最大等待时间，默认0，大于0使用tryLock加锁            |
-| leaseTime | 否   | 10                                   | 加锁的时间， 默认10                                          |
-| unit      | 否   | TimeUnit.SECONDS                     | waitTime，leaseTime参数的单位，默认秒                        |
-| isFair    | 否   | false                                | 是否公平锁，默认否                                           |
+| 属性      | 必填 | 示例                                                         | 描述                                                         |
+| --------- | ---- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| spelKey   | 是   | 例1："'xxxController.xxxMethod' + #param"<br />例2："#param" | 加锁的key，支持spel表达式，如果计算失败默认不加锁（必须是可变的key，避免对所有用户加锁） |
+| waitTime  | 否   | 0                                                            | 获取锁的最大等待时间，默认0，大于0使用tryLock加锁            |
+| leaseTime | 否   | 10                                                           | 加锁的时间， 默认10                                          |
+| unit      | 否   | TimeUnit.SECONDS                                             | waitTime，leaseTime参数的单位，默认秒                        |
+| isFair    | 否   | false                                                        | 是否公平锁，默认否                                           |
 
 ```java
-//计算后的spelKey例：UmsUserController.loginSms131xxxx8888，lock加锁5秒，获取失败阻塞等待
-@BusinessLock(spelKey = "'UmsUserController.loginSms' + #umsLoginSmsReq.phone", leaseTime = 5)
+//计算后的spelKey例：com.xxx.UmsUserController.loginSms131xxxx8888，lock加锁5秒，获取失败阻塞等待
+@BusinessLock(spelKey = "#umsLoginSmsReq.phone", leaseTime = 5)
 @PostMapping(value = "/loginSms")
 @ApiOperation(value = "登录短信接口")
 public R loginSms(@Validated @RequestBody UmsLoginSmsReq umsLoginSmsReq, HttpServletRequest request) {
     return umsUserService.loginSms(umsLoginSmsReq, request);
 }
 
-//计算后的spelKey例：UmsUserController.closed12，tryLock尝试获取公平锁800毫秒，获取成功加锁500毫秒，获取失败返回数据处理中，请稍后再试...
-@BusinessLock(spelKey = "'UmsUserController.closed' + #user.id", , waitTime = 800, leaseTime = 500, unit = TimeUnit.MILLISECONDS, isFair = true)
+//计算后的spelKey例：com.xxx.UmsUserController.closed12，tryLock尝试获取公平锁800毫秒，获取成功加锁500毫秒，获取失败返回数据处理中，请稍后再试...
+@BusinessLock(spelKey = "#user.id", , waitTime = 800, leaseTime = 500, unit = TimeUnit.MILLISECONDS, isFair = true)
 @UserLogin(userType = JwtConstant.LOGIN_USER_TYPE.MEMBER)
 @ApiOperation(value = "注销接口")
 @PostMapping(value = "/closed")
@@ -424,12 +424,12 @@ public class RabbitmqTaskQueue {
          * attributes：消息内容，Map<String, Object>类型用于存放业务消息
          */
         Message message = MessageBuilder.create()
-                .withMessageId(IdUtil.simpleUUID())
-                .withMessageType(MessageType.RELIANT)
-                .withTopic(RabbitmqUserConstant.EXCHANGE.EVENT)
-                .withRoutingKey(RabbitmqUserConstant.ROUTINGKEY.TASK)
-                .withDelayMills(5000)
-                .withAttributes(data).build();
+                .messageId(IdUtil.simpleUUID())
+                .messageType(MessageType.RELIANT)
+                .topic(RabbitmqUserConstant.EXCHANGE.EVENT)
+                .routingKey(RabbitmqUserConstant.ROUTINGKEY.TASK)
+                .delayMills(5000)
+                .attributes(data).build();
         //使用rabbit封装的api客户端发送消息
         producerClient.send(message);
 
