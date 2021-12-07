@@ -143,13 +143,21 @@ public enum SysErrorEnums implements IMessageEnum {
 #### 2.2.2. 抛异常的方式
 
 1. 调用Asserts类方法（`推荐`）
-```java
+```text
 Asserts.fail("错误信息");
 Asserts.fail(SysErrorEnums.EMPTY_PARAME);
-Asserts.fail(SysErrorEnums.ORDER_FAIL, "012312312", "已支付");
+Asserts.fail("订单{0}预支付失败，当前状态：{1}", "012312312", "已支付");
+
+//param check
+Asserts.isNull(param, SysErrorEnums.ERROR_PARAME);
+Asserts.notNull(param, SysErrorEnums.ERROR_PARAME);
+Asserts.equals(param1, param1, SysErrorEnums.ERROR_PARAME);
+Asserts.isTrue(param1, SysErrorEnums.ERROR_PARAME);
+Asserts.notEmpty(param, SysErrorEnums.ERROR_PARAME);
+Asserts.notEquals(param1, param2, SysErrorEnums.ERROR_PARAME);
 ```
 2. 直接new一个BusinessException异常
-```java
+```text
 throw new BusinessException("错误信息");
 throw new BusinessException(SysErrorEnums.EMPTY_PARAME);
 throw new BusinessException(SysErrorEnums.ORDER_FAIL, "012312312", "已支付");
@@ -158,19 +166,24 @@ throw new BusinessException(SysErrorEnums.ORDER_FAIL, "012312312", "已支付");
 
 ### 2.3. 返回结果封装
 #### 2.3.1. 返回通用结果对象
-```java
+```text
 返回R对象（com.zsk.loaned.common.model.R）
-
+```
 方法示例：
-@GetMapping("/test")
-public R test(){
-    JSONObject d = new JSONObject();
-    d.put("test", "test");
-    //返回结果直接放到data里面
-    return R.ok().setData(d);
+```java
+@RestController
+public class DemoController {
+    @GetMapping("/test")
+    public R test(){
+        JSONObject d = new JSONObject();
+        d.put("test", "test");
+        //返回结果直接放到data里面
+        return R.ok().setData(d);
+    }
 }
-
+```
 返回示例：
+```json
 {
     "msg": "success",
     "code": 200,
@@ -181,17 +194,22 @@ public R test(){
 }
 ```
 #### 2.3.2. 返回通用分页对象
-```java
+```text
 返回PageResult对象（com.zsk.loaned.common.model.PageResult）
-
+```
 方法示例：
-@GetMapping("/list")
-public R list(Integer page, Integer limit){
-    PageResult pageData = service.list(page, limit);
-    return R.ok().setPageData(pageData);
+```java
+@RestController
+public class DemoController {
+    @GetMapping("/list")
+    public R list(Integer page, Integer limit){
+        PageResult pageData = service.list(page, limit);
+        return R.ok().setPageData(pageData);
+    }
 }
-
+```
 返回示例：
+```json
 {
     "msg": "success",
     "code": 200,
@@ -216,40 +234,47 @@ public R list(Integer page, Integer limit){
     "success": true
 }  
 ```
-
 ### 2.4. 获取用户信息
-
 #### 2.4.1 从CurrentUser中获取用户信息
 
 ```java
-CurrentUser user = UserContext.getUser();
-log.info("用户ID：{}", user.getUserId());
-//admin 后端用户，member APP用户，用户服务获取用户详细信息时使用
-log.info("用户类型：{}", user.getUserType());
+@RestController
+public class DemoController {
+    public void test(){
+        CurrentUser user = UserContext.getUser();
+        log.info("用户ID：{}", user.getUserId());
+        //admin 后端用户，member APP用户，用户服务获取用户详细信息时使用
+        log.info("用户类型：{}", user.getUserType());
+    }
+}
 ```
 #### 2.4.2 从安全上下文获取用户信息
-
-```java
+```text
 String userId = SecurityContextHolder.getContext().getAuthentication().getPrincipal().toString();
 ```
 #### 2.4.3 业务中获取用户的详细信息进行业务处理（`业务使用`）
 
 ```java
-// 1.参数直接传递（controller接口直接接收用户信息，需配合@CurrentUser注解使用）（推荐）
-@GetMapping("/userInfo")
-public R userInfo(@CurrentUser UmsUserInfo userInfo){
-    return R.ok().setData(userInfo);
+@RestController
+public class DemoController {
+    
+    @Autowired
+    private UmsUserService umsUserService;
+    
+    // 1.参数直接传递（controller接口直接接收用户信息，需配合@CurrentUser注解使用）（推荐）
+    @GetMapping("/userInfo")
+    public R userInfo(@CurrentUser UmsUserInfo userInfo){
+        return R.ok().setData(userInfo);
+    }
+
+    // 2.注入umsUserService服务，使用提供的getCurrentUser方法
+    UmsUserInfo userInfo = umsUserService.getCurrentUser();
 }
-
-// 2.注入umsUserService服务，使用提供的getCurrentUser方法
-UmsUserInfo userInfo = umsUserService.getCurrentUser();
 ```
-
 > 推荐使用注解参数的方式注入用户信息
 >
 
 ### 2.5. Redis使用
-
 #### 2.5.1. 维护业务redis的key
 维护在com.zsk.loaned.*.rediskeys下，以下已用户缓存为例：
 ```java
@@ -272,36 +297,43 @@ public class UserKey extends BasePrefix {
 ```
 #### 2.5.2. 使用redis存取数据
 ```java
-//注入redis服务
-@Autowired
-private RedisService redisService;
+@RestController
+public class DemoController {
+    //注入redis服务
+    @Autowired
+    private RedisService redisService;
 
-//从redis里面获取缓存数据
-UmsUser umsUser = redisService.get(UserKey.userById, userId, UmsUser.class);
+    public void test(){
+        //从redis里面获取缓存数据
+        UmsUser umsUser = redisService.get(UserKey.userById, userId, UmsUser.class);
 
-//将数据存入redis
-redisService.set(UserKey.userById, userId, umsUser);
+        //将数据存入redis
+        redisService.set(UserKey.userById, userId, umsUser);
+    }
+}
 ```
 
 ### 2.6 分布式锁（redission）
-
 #### 2.6.1 直接redisson原生代码实现（不推荐）
-
 ```java
-@UserLogin(userType = JwtConstant.LOGIN_USER_TYPE.MEMBER)
-@ApiOperation(value = "渠道注册")
-@PostMapping("/channelRegisterH5")
-public R channelRegisterH5(@Validated @RequestBody UmsChannelRegisterReq channelRegisterReq, HttpServletRequest request) {
-    try {
-        //直接使用redission代码加锁
-        if (redissionService.tryLock(LockKey.channelRegLockH5, channelRegisterReq.getPhone(), 5)) {
-            return umsUserService.channelRegisterH5(channelRegisterReq, request);
-        } else {
-            return R.error(SysErrorEnums.TIME_OUT);
+@RestController
+public class DemoController {
+    
+    @UserLogin(userType = JwtConstant.LOGIN_USER_TYPE.MEMBER)
+    @ApiOperation(value = "渠道注册")
+    @PostMapping("/channelRegisterH5")
+    public R channelRegisterH5(@Validated @RequestBody UmsChannelRegisterReq channelRegisterReq, HttpServletRequest request) {
+        try {
+            //直接使用redission代码加锁
+            if (redissionService.tryLock(LockKey.channelRegLockH5, channelRegisterReq.getPhone(), 5)) {
+                return umsUserService.channelRegisterH5(channelRegisterReq, request);
+            } else {
+                return R.error(SysErrorEnums.TIME_OUT);
+            }
+        } finally {
+            //最终解锁
+            redissionService.unlock(LockKey.channelRegLockH5, channelRegisterReq.getPhone());
         }
-    } finally {
-        //最终解锁
-        redissionService.unlock(LockKey.channelRegLockH5, channelRegisterReq.getPhone());
     }
 }
 ```
@@ -317,34 +349,38 @@ public R channelRegisterH5(@Validated @RequestBody UmsChannelRegisterReq channel
 | isFair    | 否   | false                                                        | 是否公平锁，默认否                                           |
 
 ```java
-//计算后的spelKey例：com.xxx.UmsUserController.loginSms131xxxx8888，lock加锁5秒，获取失败阻塞等待
-@BusinessLock(spelKey = "#umsLoginSmsReq.phone", leaseTime = 5)
-@PostMapping(value = "/loginSms")
-@ApiOperation(value = "登录短信接口")
-public R loginSms(@Validated @RequestBody UmsLoginSmsReq umsLoginSmsReq, HttpServletRequest request) {
-    return umsUserService.loginSms(umsLoginSmsReq, request);
-}
+@RestController
+public class DemoController {
+    
+    //计算后的spelKey例：com.xxx.UmsUserController.loginSms131xxxx8888，lock加锁5秒，获取失败阻塞等待
+    @BusinessLock(spelKey = "#umsLoginSmsReq.phone", leaseTime = 5)
+    @PostMapping(value = "/loginSms")
+    @ApiOperation(value = "登录短信接口")
+    public R loginSms(@Validated @RequestBody UmsLoginSmsReq umsLoginSmsReq, HttpServletRequest request) {
+        return umsUserService.loginSms(umsLoginSmsReq, request);
+    }
 
-//计算后的spelKey例：com.xxx.UmsUserController.closed12，tryLock尝试获取公平锁800毫秒，获取成功加锁500毫秒，获取失败返回数据处理中，请稍后再试...
-@BusinessLock(spelKey = "#user.id", , waitTime = 800, leaseTime = 500, unit = TimeUnit.MILLISECONDS, isFair = true)
-@UserLogin(userType = JwtConstant.LOGIN_USER_TYPE.MEMBER)
-@ApiOperation(value = "注销接口")
-@PostMapping(value = "/closed")
-public R closed(@Validated @RequestBody UserClosedReq closedReq, @CurrentUser UmsUserInfo user, HttpServletRequest request) 	{
-    return umsUserService.closed(closedReq, user, request);
+    //计算后的spelKey例：com.xxx.UmsUserController.closed12，tryLock尝试获取公平锁800毫秒，获取成功加锁500毫秒，获取失败返回数据处理中，请稍后再试...
+    @BusinessLock(spelKey = "#user.id", waitTime = 800, leaseTime = 500, unit = TimeUnit.MILLISECONDS, isFair = true)
+    @UserLogin(userType = JwtConstant.LOGIN_USER_TYPE.MEMBER)
+    @ApiOperation(value = "注销接口")
+    @PostMapping(value = "/closed")
+    public R closed(@Validated @RequestBody UserClosedReq closedReq, @CurrentUser UmsUserInfo user, HttpServletRequest request) 	{
+        return umsUserService.closed(closedReq, user, request);
+    }
 }
 ```
 
 ### 2.7 消息中间件（rabbitmq）
-
 #### 2.7.1引入配置和相关依赖
 
-```java
+```yaml
 //在nacos中加入rabbit-config.yaml扩展配置
 extension-configs:
     - refresh: true
     dataId: rabbit-config.yaml
-    
+```
+```text
 //在maven中引入相关依赖
 <!-- 消息模块 -->
 <dependency>
@@ -397,16 +433,16 @@ public class RabbitmqTaskQueue {
 ```
 
 #### 2.7.3 业务消息发送和消费
-
 ##### 2.7.3.1 发送消息
-
 ```java
-	/** rabbitmq客户端 */
+@RestController
+public class DemoController {
+    /** rabbitmq客户端 */
     @Autowired
     private RabbitProducerClient producerClient;
 
-	/** 发送rabbitmq消息 */
-	@GetMapping("/sendMq")
+    /** 发送rabbitmq消息 */
+    @GetMapping("/sendMq")
     public R sendMq(String msg) {
         JSONObject data = new JSONObject();
         data.put("message", msg);
@@ -456,6 +492,7 @@ public class RabbitmqTaskQueue {
         });
         return R.ok();
     }
+}
 ```
 
 ##### 2.7.3.2 监听消息并消费
