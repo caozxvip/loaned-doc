@@ -1,5 +1,5 @@
 
-文档名称 | LOANED项目文档 
+文档名称 | LOANED项目文档
 --- | ---  
 更新时间 | 2021-11-22
 基于框架 | SpringCloudAlibaba
@@ -69,16 +69,16 @@
 ## 2. 开始使用
 ### 2.1. 代码生成器
 1. IDEA安装插件，MyBatisCodeHelperPro [下载地址](https://zhile.io/2019/04/23/mybatis-code-helper-pro-crack.html)<br>
-![](https://huabeifile.corntoast.cn/data/20210327/1616836193248886755174.png)</br>
+   ![](https://huabeifile.corntoast.cn/data/20210327/1616836193248886755174.png)</br>
 2. IDEA连接数据库<br>
-![](https://huabeifile.corntoast.cn/data/20210327/1616836872200765681441.png)</br>
-![](https://huabeifile.corntoast.cn/data/20210327/1616836898284762176685.png)<br>
-![](https://huabeifile.corntoast.cn/data/20210327/1616836940038247754946.png)<br>
+   ![](https://huabeifile.corntoast.cn/data/20210327/1616836872200765681441.png)</br>
+   ![](https://huabeifile.corntoast.cn/data/20210327/1616836898284762176685.png)<br>
+   ![](https://huabeifile.corntoast.cn/data/20210327/1616836940038247754946.png)<br>
 3. 生成代码<br>
-![](https://huabeifile.corntoast.cn/data/20210327/1616838210950386711454.png)<br>
-![](https://huabeifile.corntoast.cn/data/20210327/1616838239849484252142.png)<br>
-`检查代码是否生成`<br>
-![](https://huabeifile.corntoast.cn/data/20210327/1616838272158358202264.png)<br>
+   ![](https://huabeifile.corntoast.cn/data/20210327/1616838210950386711454.png)<br>
+   ![](https://huabeifile.corntoast.cn/data/20210327/1616838239849484252142.png)<br>
+   `检查代码是否生成`<br>
+   ![](https://huabeifile.corntoast.cn/data/20210327/1616838272158358202264.png)<br>
 
 
 > 请先安装插件和连接数据库，按规范生成到对应目录，以上仅做参考
@@ -141,8 +141,7 @@ public enum SysErrorEnums implements IMessageEnum {
 
 
 #### 2.2.2. 抛异常的方式
-
-1. 调用Asserts类方法（`推荐`）
+##### 1. 调用Asserts类方法（`推荐`）
 ```text
 Asserts.fail("错误信息");
 Asserts.fail(SysErrorEnums.EMPTY_PARAME);
@@ -156,12 +155,13 @@ Asserts.isTrue(param1, SysErrorEnums.ERROR_PARAME);
 Asserts.notEmpty(param, SysErrorEnums.ERROR_PARAME);
 Asserts.notEquals(param1, param2, SysErrorEnums.ERROR_PARAME);
 ```
-2. 直接new一个BusinessException异常
+##### 2. 直接new一个BusinessException异常
 ```text
 throw new BusinessException("错误信息");
 throw new BusinessException(SysErrorEnums.EMPTY_PARAME);
 throw new BusinessException(SysErrorEnums.ORDER_FAIL, "012312312", "已支付");
 ```
+
 > 最好使用Asserts.fail方式，使用维护的错误码
 
 ### 2.3. 返回结果封装
@@ -437,61 +437,61 @@ public class RabbitmqTaskQueue {
 ```java
 @RestController
 public class DemoController {
-    /** rabbitmq客户端 */
-    @Autowired
-    private RabbitProducerClient producerClient;
+   /** rabbitmq客户端 */
+   @Autowired
+   private RabbitProducerClient producerClient;
 
-    /** 发送rabbitmq消息 */
-    @GetMapping("/sendMq")
-    public R sendMq(String msg) {
-        JSONObject data = new JSONObject();
-        data.put("message", msg);
-        data.put("time", System.currentTimeMillis());
-        /**
-         * 业务消息建造者<MessageBuilder>构建消息
-         * messageId: 消息唯一ID，可不设置，默认IdUtil.simpleUUID()方法创建
-         * messageType消息类型：
-         *              MessageType.RAPID      迅速消息：不保证消息的可靠性，也不做confirm确认
-         *              MessageType.CONFIRM    确认消息：不保证消息的可靠性，但是会做消息的confim确认
-         *              MessageType.RELIANT    可靠消息：保证消息的100%的可靠性投递，定时自动补偿
-         * topic：消息要发送的交换机
-         * routingKey：消息要发送的路由键（根据不同的路由规则，将交换机上的消息投递到不同的队列）
-         * delayMills: 消息延迟发送的时间（单位/ms），队列必须是延迟队列才会生效
-         * attributes：消息内容，Map<String, Object>类型用于存放业务消息
-         */
-        Message message = MessageBuilder.create()
-                .messageId(IdUtil.simpleUUID())
-                .messageType(MessageType.RELIANT)
-                .topic(RabbitmqUserConstant.EXCHANGE.EVENT)
-                .routingKey(RabbitmqUserConstant.ROUTINGKEY.TASK)
-                .delayMills(5000)
-                .attributes(data).build();
-        //使用rabbit封装的api客户端发送消息
-        producerClient.send(message);
-
-
-        List<Message> messageList = Lists.newArrayList();
-        messageList.add(message);
-        messageList.add(message);
-        //使用rabbit封装的api客户端发送批量消息，注：批量消息默认迅速消息类型，不保证可靠性
-        producerClient.send(messageList);
+   /** 发送rabbitmq消息 */
+   @GetMapping("/sendMq")
+   public R sendMq(String msg) {
+      JSONObject data = new JSONObject();
+      data.put("message", msg);
+      data.put("time", System.currentTimeMillis());
+      /**
+       * 业务消息建造者<MessageBuilder>构建消息
+       * messageId: 消息唯一ID，可不设置，默认IdUtil.simpleUUID()方法创建
+       * messageType消息类型：
+       *              MessageType.RAPID      迅速消息：不保证消息的可靠性，也不做confirm确认
+       *              MessageType.CONFIRM    确认消息：不保证消息的可靠性，但是会做消息的confim确认
+       *              MessageType.RELIANT    可靠消息：保证消息的100%的可靠性投递，定时自动补偿
+       * topic：消息要发送的交换机
+       * routingKey：消息要发送的路由键（根据不同的路由规则，将交换机上的消息投递到不同的队列）
+       * delayMills: 消息延迟发送的时间（单位/ms），队列必须是延迟队列才会生效
+       * attributes：消息内容，Map<String, Object>类型用于存放业务消息
+       */
+      Message message = MessageBuilder.create()
+              .messageId(IdUtil.simpleUUID())
+              .messageType(MessageType.RELIANT)
+              .topic(RabbitmqUserConstant.EXCHANGE.EVENT)
+              .routingKey(RabbitmqUserConstant.ROUTINGKEY.TASK)
+              .delayMills(5000)
+              .attributes(data).build();
+      //使用rabbit封装的api客户端发送消息
+      producerClient.send(message);
 
 
-        //使用rabbit封装的api客户端发送带回调方法的消息，注：带回调消息默认confirm消息类型，不保证可靠性，会做confirm确认
-        producerClient.send(message, new SendCallback() {
-            @Override
-            public void onSuccess() {
-                log.info("消息发送成功，messgeId：{}", message.getMessageId());
-                //do something
-            }
-            @Override
-            public void onFailure(String reason) {
-                log.error("消息发送失败，messgeId：{}，reason：{}", message.getMessageId(), reason);
-                //do something
-            }
-        });
-        return R.ok();
-    }
+      List<Message> messageList = Lists.newArrayList();
+      messageList.add(message);
+      messageList.add(message);
+      //使用rabbit封装的api客户端发送批量消息，注：批量消息默认迅速消息类型，不保证可靠性
+      producerClient.send(messageList);
+
+
+      //使用rabbit封装的api客户端发送带回调方法的消息，注：带回调消息默认confirm消息类型，不保证可靠性，会做confirm确认
+      producerClient.send(message, new SendCallback() {
+         @Override
+         public void onSuccess() {
+            log.info("消息发送成功，messgeId：{}", message.getMessageId());
+            //do something
+         }
+         @Override
+         public void onFailure(String reason) {
+            log.error("消息发送失败，messgeId：{}，reason：{}", message.getMessageId(), reason);
+            //do something
+         }
+      });
+      return R.ok();
+   }
 }
 ```
 
@@ -507,7 +507,7 @@ public class RabbitMqListener {
         Map<String, Object> data = msg.getAttributes();
         log.info("业务消息：", data);
         //do something
-        
+
         //deliveryTag：该消息的标识，通道内递增，用于签收消息
         //multiple：是否批量， true：将一次性ack所有小于deliveryTag的消息。
         //requeue：被拒绝的是否重新入队列。
